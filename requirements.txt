@@ -3,3 +3,4 @@ psycopg==3.2.13
 psycopg-c==3.2.13
 psycopg-pool==3.2.8
 SQLAlchemy==2.0.44
+mcp>=1.0.0

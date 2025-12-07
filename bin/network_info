@@ -9,7 +9,18 @@ done
 DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
 cd $DIR/../
-if [[ -n "$REBUILD" ]]; then
+
+# Load environment variables from .env if it exists
+if [ -f ".env" ]; then
+  set -a
+  . ".env"
+  set +a
+fi
+
+# Ensure POSTGRES_PASSWORD is set
+: "${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set in .env file}"
+
+if [[ -n "${REBUILD:-}" ]]; then
   docker pull python:3-alpine
   docker pull postgres:13-alpine
   docker compose build

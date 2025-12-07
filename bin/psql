@@ -10,4 +10,11 @@ DIR="$( cd -P "$( dirname "$SOURCE" )" && pwd )"
 
 cd $DIR/../
 
-docker compose run -e PGPASSWORD=network_info --entrypoint=psql db -h db -U network_info -x network_info
+# Load environment variables from .env if it exists
+if [ -f ".env" ]; then
+  set -a
+  . ".env"
+  set +a
+fi
+
+docker compose run -e PGPASSWORD="${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}" --entrypoint=psql db -h db -U "${POSTGRES_USER:-network_info}" -x "${POSTGRES_DB:-network_info}"
