@@ -40,6 +40,9 @@ pip install -r requirements.txt
 # Run the parser
 python create_db.py -c "postgresql+psycopg://user:pass@host:5432/database"
 python create_db.py -c "..." -d  # Enable debug logging
+
+# Run tests
+pytest tests/ -v
 ```
 
 ## Architecture
@@ -55,6 +58,7 @@ Single `block` table storing IP network blocks with PostgreSQL CIDR type for eff
 ### Code Structure
 
 - `create_db.py`: Main parser using multiprocessing (workers = CPU count). Reads gzipped WHOIS dumps, parses blocks with regex, inserts via SQLAlchemy in batches of 10,000.
+- `web_server.py`: FastAPI web server with REST API and web UI (see Web Server section below)
 - `mcp_server.py`: MCP server for AI assistant integration (see MCP Server section below)
 - `db/model.py`: SQLAlchemy `Block` model with PostgreSQL-specific CIDR column
 - `db/helper.py`: Database connection setup with `create_db=True` option to reset schema
@@ -74,6 +78,35 @@ SELECT * FROM block WHERE block.inetnum >> '8.8.8.8' ORDER BY block.inetnum DESC
 ```
 
 The `>>` operator finds all CIDR ranges containing the IP, ordered most-specific first.
+
+## Web Server
+
+FastAPI web server providing both a REST API and web UI.
+
+### Running the Web Server
+
+```bash
+# Set environment variables
+export POSTGRES_PASSWORD=your_password
+
+# Run with uvicorn (development)
+python web_server.py
+
+# Or run with uvicorn directly (production)
+uvicorn web_server:app --host 0.0.0.0 --port 8000
+```
+
+Access the web UI at `http://localhost:8000`
+
+### REST API Endpoints
+
+- `GET /api/lookup/{ip}` - Look up network blocks containing an IP
+- `GET /api/search/netname?netname=...&limit=20&exact_match=false` - Search by network name
+- `GET /api/search/description?search_text=...&limit=20` - Full-text search
+- `GET /api/search/country?country_code=...&limit=20&netname_filter=...` - Search by country
+- `GET /api/stats` - Get database statistics
+
+API documentation available at `http://localhost:8000/docs` (Swagger UI)
 
 ## MCP Server
 

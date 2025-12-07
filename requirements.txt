@@ -4,3 +4,6 @@ psycopg-c==3.2.13
 psycopg-pool==3.2.8
 SQLAlchemy==2.0.44
 mcp>=1.0.0
+fastapi>=0.115.0
+uvicorn>=0.32.0
+pytest>=8.0.0

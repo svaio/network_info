@@ -1,18 +1,28 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*- ®
+# -*- coding: utf-8 -*-
 
-from sqlalchemy import create_engine
-from sqlalchemy.ext.declarative import declarative_base
-from sqlalchemy.orm import sessionmaker
+from sqlalchemy import Engine, create_engine
+from sqlalchemy.orm import Session, declarative_base, sessionmaker
 
 Base = declarative_base()
 
 
 def get_base():
+    """Return the SQLAlchemy declarative base."""
     return Base
 
 
-def setup_connection(connection_string, create_db=False):
+def setup_connection(connection_string: str, create_db: bool = False) -> Session:
+    """
+    Set up a database connection and return a session.
+
+    Args:
+        connection_string: PostgreSQL connection string
+        create_db: If True, drop and recreate all tables
+
+    Returns:
+        SQLAlchemy Session instance
+    """
     engine = create_postgres_pool(connection_string)
     session = sessionmaker()
     session.configure(bind=engine)
@@ -24,6 +34,15 @@ def setup_connection(connection_string, create_db=False):
     return session()
 
 
-def create_postgres_pool(connection_string):
+def create_postgres_pool(connection_string: str) -> Engine:
+    """
+    Create a SQLAlchemy engine for PostgreSQL.
+
+    Args:
+        connection_string: PostgreSQL connection string
+
+    Returns:
+        SQLAlchemy Engine instance
+    """
     engine = create_engine(connection_string)
     return engine
