@@ -6,7 +6,7 @@
 from datetime import datetime
 from typing import Optional
 
-from sqlalchemy import Column, DateTime, Index, Integer, String, literal_column
+from sqlalchemy import Column, DateTime, Index, Integer, String, UniqueConstraint, literal_column
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.sql import func
 
@@ -26,10 +26,11 @@ class Block(Base):
         description: Description of the network
         country: Country code
         maintained_by: Maintainer identifier
-        created: Creation timestamp
-        last_modified: Last modification timestamp
+        created: Creation timestamp (from RIR data)
+        last_modified: Last modification timestamp (from RIR data)
         source: RIR source (afrinic, apnic, arin, lacnic, ripe)
         status: Allocation status
+        import_date: Date when this record was imported/updated
     """
 
     __tablename__ = "block"
@@ -42,10 +43,13 @@ class Block(Base):
     maintained_by: Optional[str] = Column(String, index=True)
     created: Optional[datetime] = Column(DateTime, index=True)
     last_modified: Optional[datetime] = Column(DateTime, index=True)
-    source: Optional[str] = Column(String, index=True)
+    source: str = Column(String, nullable=False, index=True)
     status: Optional[str] = Column(String, index=True)
+    import_date: datetime = Column(DateTime, nullable=False, index=True, server_default=func.now())
 
     __table_args__ = (
+        # Unique constraint for upsert operations
+        UniqueConstraint("inetnum", "source", name="uq_block_inetnum_source"),
         Index(
             "ix_block_description",
             func.to_tsvector(literal_column("'english'"), description),

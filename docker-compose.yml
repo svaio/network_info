@@ -17,12 +17,63 @@ services:
     networks:
       - backend
 
+  web:
+    image: network_info_web
+    build:
+      context: .
+      dockerfile: Dockerfile.web
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-network_info}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-network_info}
+      - RATE_LIMIT_REQUESTS=${RATE_LIMIT_REQUESTS:-100}
+      - RATE_LIMIT_WINDOW=${RATE_LIMIT_WINDOW:-60}
+    ports:
+      - "${WEB_PORT:-8000}:8000"
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+      - frontend
+    restart: unless-stopped
+
+  mcp:
+    image: network_info_mcp
+    build:
+      context: .
+      dockerfile: Dockerfile.mcp
+    environment:
+      - POSTGRES_USER=${POSTGRES_USER:-network_info}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+      - POSTGRES_HOST=db
+      - POSTGRES_PORT=5432
+      - POSTGRES_DB=${POSTGRES_DB:-network_info}
+    volumes:
+      - /etc/localtime:/etc/localtime:ro
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - backend
+    restart: unless-stopped
+
   db:
     image: postgres:13-alpine
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-network_info}
       POSTGRES_USER: ${POSTGRES_USER:-network_info}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}
+    command:
+      - "postgres"
+      - "-c"
+      - "max_wal_size=2GB"
+      - "-c"
+      - "checkpoint_completion_target=0.9"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-network_info}"]
       interval: 30s
@@ -38,6 +89,8 @@ networks:
   backend:
     driver: bridge
     internal: true
+  frontend:
+    driver: bridge
 
 volumes:
   pg_data:

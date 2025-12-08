@@ -1,6 +1,6 @@
 services:
   network_info:
     entrypoint: /app/create_db.py
-    command: -c postgresql+psycopg://${POSTGRES_USER:-network_info}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/${POSTGRES_DB:-network_info} -d
+    command: -c postgresql+psycopg://${POSTGRES_USER:-network_info}:${POSTGRES_PASSWORD:?POSTGRES_PASSWORD must be set}@db:5432/${POSTGRES_DB:-network_info} -d # --incremental
     volumes:
       - .:/app

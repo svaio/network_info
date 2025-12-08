@@ -1,0 +1,22 @@
+FROM python:3-alpine
+LABEL maintainer="Christian Mehlmauer <FireFart@gmail.com>"
+
+RUN adduser -h /app -g app -D app
+
+WORKDIR /app
+
+COPY requirements.txt /app
+
+RUN apk add --no-cache postgresql-libs \
+  && apk add --no-cache --virtual .builddeps build-base postgresql-dev \
+  && pip install -r requirements.txt \
+  && apk del --no-cache .builddeps
+
+COPY db/ /app/db/
+COPY web_server.py /app/
+RUN chown -R app:app /app
+USER app
+
+EXPOSE 8000
+
+CMD ["python", "web_server.py"]

@@ -1,0 +1,20 @@
+FROM python:3-alpine
+LABEL maintainer="Christian Mehlmauer <FireFart@gmail.com>"
+
+RUN adduser -h /app -g app -D app
+
+WORKDIR /app
+
+COPY requirements.txt /app
+
+RUN apk add --no-cache postgresql-libs \
+  && apk add --no-cache --virtual .builddeps build-base postgresql-dev \
+  && pip install -r requirements.txt \
+  && apk del --no-cache .builddeps
+
+COPY db/ /app/db/
+COPY mcp_server.py /app/
+RUN chown -R app:app /app
+USER app
+
+CMD ["python", "mcp_server.py"]

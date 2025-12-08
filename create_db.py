@@ -15,13 +15,15 @@ import os.path
 import re
 import time
 from dataclasses import dataclass
+from datetime import datetime
 from multiprocessing import Process, Queue, cpu_count, current_process
 from typing import Callable, Optional, Union
 
 from netaddr import IPNetwork, iprange_to_cidrs
+from sqlalchemy.dialects.postgresql import insert
 
 from db.helper import setup_connection
-from db.model import Block
+from db.model import Base, Block
 
 VERSION = "2.0"
 FILELIST = [
@@ -247,12 +249,38 @@ def read_blocks(filename: str, logger: logging.Logger) -> list[bytes]:
     return blocks
 
 
+def upsert_block(session, block_data: dict) -> None:
+    """
+    Insert or update a block record using PostgreSQL ON CONFLICT.
+
+    Args:
+        session: SQLAlchemy session
+        block_data: Dictionary of block attributes
+    """
+    stmt = insert(Block).values(**block_data)
+    stmt = stmt.on_conflict_do_update(
+        constraint="uq_block_inetnum_source",
+        set_={
+            "netname": stmt.excluded.netname,
+            "description": stmt.excluded.description,
+            "country": stmt.excluded.country,
+            "maintained_by": stmt.excluded.maintained_by,
+            "created": stmt.excluded.created,
+            "last_modified": stmt.excluded.last_modified,
+            "status": stmt.excluded.status,
+            "import_date": stmt.excluded.import_date,
+        },
+    )
+    session.execute(stmt)
+
+
 def parse_blocks(
     jobs: Queue,
     connection_string: str,
     num_blocks: int,
     num_workers: int,
     logger: logging.Logger,
+    incremental: bool = False,
 ) -> None:
     """
     Worker function to parse WHOIS blocks and insert into database.
@@ -263,11 +291,13 @@ def parse_blocks(
         num_blocks: Total number of blocks (for progress calculation)
         num_workers: Number of worker processes
         logger: Logger instance
+        incremental: If True, use upsert; otherwise use simple insert
     """
     session = setup_connection(connection_string)
     counter = 0
     blocks_done = 0
     start_time = time.time()
+    import_date = datetime.now()
 
     while True:
         block = jobs.get()
@@ -318,31 +348,39 @@ def parse_blocks(
 
         if isinstance(inetnum, list):
             for cidr in inetnum:
-                b = Block(
-                    inetnum=str(cidr),
-                    netname=netname,
-                    description=description,
-                    country=country,
-                    maintained_by=maintained_by,
-                    created=created,
-                    last_modified=last_modified,
-                    source=source,
-                    status=status,
-                )
-                session.add(b)
+                block_data = {
+                    "inetnum": str(cidr),
+                    "netname": netname,
+                    "description": description,
+                    "country": country,
+                    "maintained_by": maintained_by,
+                    "created": created,
+                    "last_modified": last_modified,
+                    "source": source,
+                    "status": status,
+                    "import_date": import_date,
+                }
+                if incremental:
+                    upsert_block(session, block_data)
+                else:
+                    session.add(Block(**block_data))
         else:
-            b = Block(
-                inetnum=inetnum.decode("utf-8"),
-                netname=netname,
-                description=description,
-                country=country,
-                maintained_by=maintained_by,
-                created=created,
-                last_modified=last_modified,
-                source=source,
-                status=status,
-            )
-            session.add(b)
+            block_data = {
+                "inetnum": inetnum.decode("utf-8"),
+                "netname": netname,
+                "description": description,
+                "country": country,
+                "maintained_by": maintained_by,
+                "created": created,
+                "last_modified": last_modified,
+                "source": source,
+                "status": status,
+                "import_date": import_date,
+            }
+            if incremental:
+                upsert_block(session, block_data)
+            else:
+                session.add(Block(**block_data))
 
         counter += 1
         blocks_done += 1
@@ -364,7 +402,12 @@ def parse_blocks(
     logger.debug(f"{current_process().name} finished")
 
 
-def main(connection_string: str, context: ParserContext, logger: logging.Logger) -> None:
+def main(
+    connection_string: str,
+    context: ParserContext,
+    logger: logging.Logger,
+    incremental: bool = False,
+) -> None:
     """
     Main function to orchestrate the database parsing.
 
@@ -372,9 +415,16 @@ def main(connection_string: str, context: ParserContext, logger: logging.Logger)
         connection_string: PostgreSQL connection string
         context: Parser context for tracking state
         logger: Logger instance
+        incremental: If True, update existing records instead of dropping table
     """
     overall_start_time = time.time()
-    setup_connection(connection_string, create_db=True)
+
+    if incremental:
+        logger.info("Running in incremental mode - will update existing records")
+        setup_connection(connection_string, create_db=True, drop_existing=False)
+    else:
+        logger.info("Running in full refresh mode - dropping and recreating table")
+        setup_connection(connection_string, create_db=True, drop_existing=True)
 
     for entry in FILELIST:
         context.current_filename = entry
@@ -397,7 +447,14 @@ def main(connection_string: str, context: ParserContext, logger: logging.Logger)
             for _ in range(NUM_WORKERS):
                 p = Process(
                     target=parse_blocks,
-                    args=(jobs, connection_string, context.num_blocks, NUM_WORKERS, logger),
+                    args=(
+                        jobs,
+                        connection_string,
+                        context.num_blocks,
+                        NUM_WORKERS,
+                        logger,
+                        incremental,
+                    ),
                     daemon=True,
                 )
                 p.start()
@@ -431,6 +488,12 @@ if __name__ == "__main__":
         help="Connection string to the postgres database",
     )
     parser.add_argument("-d", "--debug", action="store_true", help="set loglevel to DEBUG")
+    parser.add_argument(
+        "-i",
+        "--incremental",
+        action="store_true",
+        help="Update existing records instead of dropping table (uses upsert)",
+    )
     parser.add_argument("--version", action="version", version=f"%(prog)s {VERSION}")
     args = parser.parse_args()
 
@@ -440,4 +503,4 @@ if __name__ == "__main__":
     if args.debug:
         log.setLevel(logging.DEBUG)
 
-    main(args.connection_string, ctx, log)
+    main(args.connection_string, ctx, log, incremental=args.incremental)

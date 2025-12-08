@@ -12,13 +12,17 @@ def get_base():
     return Base
 
 
-def setup_connection(connection_string: str, create_db: bool = False) -> Session:
+def setup_connection(
+    connection_string: str, create_db: bool = False, drop_existing: bool = True
+) -> Session:
     """
     Set up a database connection and return a session.
 
     Args:
         connection_string: PostgreSQL connection string
-        create_db: If True, drop and recreate all tables
+        create_db: If True, create tables (behavior depends on drop_existing)
+        drop_existing: If True and create_db is True, drop tables first.
+                      If False, only create tables if they don't exist.
 
     Returns:
         SQLAlchemy Session instance
@@ -28,7 +32,8 @@ def setup_connection(connection_string: str, create_db: bool = False) -> Session
     session.configure(bind=engine)
 
     if create_db:
-        Base.metadata.drop_all(engine)
+        if drop_existing:
+            Base.metadata.drop_all(engine)
         Base.metadata.create_all(engine)
 
     return session()

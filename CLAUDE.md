@@ -11,8 +11,15 @@ Network Info Parser parses WHOIS databases from all five Regional Internet Regis
 ### Docker (Recommended)
 
 ```bash
+# Setup: copy and configure .env file
+cp .env.example .env
+# Edit .env and set POSTGRES_PASSWORD
+
 # Full run: build, start db, download dumps, parse
 ./bin/network_info
+
+# Start web server and MCP server (after database is populated)
+docker compose up -d web mcp
 
 # Force rebuild images first
 REBUILD=1 ./bin/network_info
@@ -26,6 +33,26 @@ REBUILD=1 ./bin/network_info
 
 # Export block table to gzipped CSV
 ./bin/export_to_gzip
+```
+
+### Docker Services
+
+| Service | Description | Port |
+|---------|-------------|------|
+| `network_info` | Database parser (runs once) | - |
+| `web` | Web UI and REST API | 8000 |
+| `mcp` | MCP server for AI assistants | - |
+| `db` | PostgreSQL database | - |
+
+```bash
+# Start all services
+docker compose up -d
+
+# Start only web server
+docker compose up -d web
+
+# View logs
+docker compose logs -f web
 ```
 
 ### Manual/Local Development
@@ -83,7 +110,14 @@ The `>>` operator finds all CIDR ranges containing the IP, ordered most-specific
 
 FastAPI web server providing both a REST API and web UI.
 
-### Running the Web Server
+### Running with Docker (Recommended)
+
+```bash
+docker compose up -d web
+# Access at http://localhost:8000
+```
+
+### Running Locally
 
 ```bash
 # Set environment variables
@@ -112,7 +146,13 @@ API documentation available at `http://localhost:8000/docs` (Swagger UI)
 
 The MCP (Model Context Protocol) server allows AI assistants to query the network database.
 
-### Running the MCP Server
+### Running with Docker (Recommended)
+
+```bash
+docker compose up -d mcp
+```
+
+### Running Locally
 
 ```bash
 # Set environment variables
@@ -136,7 +176,20 @@ python mcp_server.py
 
 ### Claude Desktop Configuration
 
-Add to `claude_desktop_config.json`:
+For Docker-based MCP server, add to `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "network-info": {
+      "command": "docker",
+      "args": ["compose", "-f", "/path/to/network_info/docker-compose.yml", "exec", "mcp", "python", "mcp_server.py"]
+    }
+  }
+}
+```
+
+For local MCP server:
 
 ```json
 {
